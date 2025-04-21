@@ -6,9 +6,9 @@ import json
 st.title("Faculty List Comparison Tool")
 
 st.write("""
-Upload two faculty lists to compare who to **add** and who to **remove**.
-- You can upload **CSV or JSON** (like the UAFS directory export)
+Upload two faculty lists (CSV or JSON) to compare who to **add**, **remove**, or whose details have **changed**.
 - Matching is based on the `EmailAddress` or `email` column
+- We'll also detect changes in: `GivenName`, `sn`, `Title`, `Department`, `TelephoneNumber`, `PhysicalDeliveryOfficeName`
 """)
 
 # File uploaders
@@ -48,7 +48,31 @@ if old_file and new_file:
             to_add = new_df[~new_df['EmailAddress'].isin(old_df['EmailAddress'])]
             to_remove = old_df[~old_df['EmailAddress'].isin(new_df['EmailAddress'])]
 
-            st.success(f"✅ Comparison complete. Found {len(to_add)} to add and {len(to_remove)} to remove.")
+            # Match on EmailAddress to detect updates
+            shared_emails = new_df[new_df['EmailAddress'].isin(old_df['EmailAddress'])]
+            merged = pd.merge(old_df, shared_emails, on='EmailAddress', suffixes=('_old', '_new'))
+
+            # Columns to check for updates
+            compare_cols = ['GivenName', 'sn', 'Title', 'Department', 'TelephoneNumber', 'PhysicalDeliveryOfficeName']
+            changes = []
+
+            for _, row in merged.iterrows():
+                diffs = {}
+                for col in compare_cols:
+                    old_val = row.get(f"{col}_old", "")
+                    new_val = row.get(f"{col}_new", "")
+                    if pd.notna(old_val) and pd.notna(new_val) and str(old_val).strip() != str(new_val).strip():
+                        diffs[col] = {"Old": old_val, "New": new_val}
+                if diffs:
+                    changes.append({
+                        "EmailAddress": row["EmailAddress"],
+                        "Changes": diffs
+                    })
+
+            st.success(f"✅ Comparison complete.")
+            st.write(f"➕ {len(to_add)} to add")
+            st.write(f"❌ {len(to_remove)} to remove")
+            st.write(f"🔁 {len(changes)} with updated details")
 
             st.subheader("➕ Faculty to Add")
             st.dataframe(to_add)
@@ -57,3 +81,19 @@ if old_file and new_file:
             st.subheader("❌ Faculty to Remove")
             st.dataframe(to_remove)
             st.download_button("Download Remove List", to_remove.to_csv(index=False), "faculty_to_remove.csv", "text/csv")
+
+            if changes:
+                st.subheader("🔁 Faculty with Updated Info")
+                change_records = []
+                for change in changes:
+                    email = change["EmailAddress"]
+                    for field, diff in change["Changes"].items():
+                        change_records.append({
+                            "EmailAddress": email,
+                            "Field": field,
+                            "Old Value": diff["Old"],
+                            "New Value": diff["New"]
+                        })
+                changes_df = pd.DataFrame(change_records)
+                st.dataframe(changes_df)
+                st.download_button("Download Change List", changes_df.to_csv(index=False), "faculty_changes.csv", "text/csv")

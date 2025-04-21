@@ -20,8 +20,18 @@ if old_file and new_file:
     old_df = pd.read_csv(old_file)
     new_df = pd.read_csv(new_file)
 
+    # Normalize column names
+    old_df.rename(columns=lambda x: x.strip(), inplace=True)
+    new_df.rename(columns=lambda x: x.strip(), inplace=True)
+
+    # Normalize 'email' to 'EmailAddress' if necessary
+    if 'email' in old_df.columns:
+        old_df.rename(columns={'email': 'EmailAddress'}, inplace=True)
+    if 'email' in new_df.columns:
+        new_df.rename(columns={'email': 'EmailAddress'}, inplace=True)
+
     if 'EmailAddress' not in old_df.columns or 'EmailAddress' not in new_df.columns:
-        st.error("Both files must contain an 'EmailAddress' column.")
+        st.error("Both files must contain an 'EmailAddress' column or 'email'.")
     else:
         to_add = new_df[~new_df['EmailAddress'].isin(old_df['EmailAddress'])]
         to_remove = old_df[~old_df['EmailAddress'].isin(new_df['EmailAddress'])]
@@ -30,10 +40,8 @@ if old_file and new_file:
 
         st.subheader("➕ Faculty to Add")
         st.dataframe(to_add)
-
         st.download_button("Download Add List", to_add.to_csv(index=False), "faculty_to_add.csv", "text/csv")
 
         st.subheader("❌ Faculty to Remove")
         st.dataframe(to_remove)
-
         st.download_button("Download Remove List", to_remove.to_csv(index=False), "faculty_to_remove.csv", "text/csv")
